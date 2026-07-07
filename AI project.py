@@ -23,6 +23,43 @@ from scipy import stats
 from matplotlib.ticker import FormatStrFormatter
 import random
 from itertools import compress
+from sklearn.model_selection import GridSearchCV
+####################################################################################
+#planning!
+
+#create the basics of an SVM model:
+# use the grid method to test a number of the various values (gamma,c,degree,kernel)
+#use ovo & ova to create a models to increase classification accuracy which is essential for SVM and mildly helpful for knn
+#return models and allow for basic input & prediction
+
+#then the list of tastks is:
+
+############
+#increase validation. There are a number of methods that can be added to all of my current models to increase their accuracy & validation, these methods are:
+
+# bias & variation (and trying to reduce both in models) using train error & difference in train error
+
+# underfitting & overfitting (find code & practical examples of this and then attempt to impliment)
+
+# grid search instead of my current method? this should be asked and can easily be implimented by removing the while loop for my method & adding a specific range
+
+# cross validation (splitting up the dataset into a number of folds and finding the accuracy of each and the accuracy of every combination of the folds, then you can use this as your model)
+
+# adding validation sets as an extra set fo data in train_test split --> train_test_validation split which should be around the same as the test (do not reduce training dataset size though) 
+
+#adding more information about the accuracy of a model with performance metrics
+
+#precision: using confusion metrics when the model gives a specific classification we can calculate the chance that this classification is correct
+#so precision is how confident we are in a specific classified datapoint being correct instead of the overall accuracy of the model, 
+# this can also help us understand bias & account for differences in accuracy for different classes
+
+#a pretty good way to explain [accuracy vs precision vs recall] = 
+# [overall chance of a correct prediction || chance that a positive result is actually positive || chance that a negative result is actually negative]
+
+#f1 score is kind of an average between precision & recall
+#############
+
+
 
 
 #(LABEL ENCODING STRING FIELDS)
@@ -334,8 +371,12 @@ def preprocessing(colls, targetvar,mincorr, init = True, pcamin=1,minvar = 0.8):
               #  instead of based on an outlier % which I think could be more accurate although it would use the same method of accuracy testing to improve
               #so the next question is, would it be better to simply test standardscaler vs robust scaler for my model as well vs remove those wih too manystandard deviations from the mean? 
               # especially since this would double the time taken, although O notation would be the same
-              removal_indexes = (np.abs(stats.zscore(dfcorrs)) > 3).all(axis=1) #creates an array where indexes 3 or more standard deviations from the mean are true and others are false
-              
+              removal_indexes = (np.abs(stats.zscore(dfcorrs)) > 4).all(axis=1) #creates an array where indexes 3 or more standard deviations from the mean are true and others are false
+              #add some consideration for when outliers should be removed (when they are a reasonably insigificant portion of the dataset)
+              #if they are too significant increase the boundary for outlier classification intil they are reasonably insignificant
+              #I think a reasonable portion of outliers to remove would be around 2% of the dataset
+
+              print("removal indexes = ", removal_indexes)
               #remcount = 0
               #for index,row in dfcorrs.iterrows():
               #       if removal_indexes[remcount]: #there is a value outside of tolerance in this row
@@ -452,7 +493,7 @@ def preprocessing(colls, targetvar,mincorr, init = True, pcamin=1,minvar = 0.8):
               #but this does assist our issue however if the data has a slowly decrementing variance it will not preform pca
               for i in range(len(cumvar)):
                      
-                     if cumvar[i] > 0.8:
+                     if cumvar[i] > 0.9:
                             break
               pcacountvar = i
 
@@ -1028,13 +1069,51 @@ def knnmodel(y,data,k):
        return ovamodelarr,accuracyarr
 #one vs all and one vs one are training methods
 #therefore I can use these methods within my output for SVM & knn models
+def linmodel(y,data,c,gamma):
+       pass
+def polymodel(y,data,c,gamma,degree):
+       pass
+def polymodel(y,data,c,gamma):
+       pass
 def svmmodel(y,data,c,gamma,kernel,degree):
        #this is the binary svm model which classifies between two classes
        x_test, x_train,y_test,y_train = train_test_split(y,data,test_size = 0.25, random_state = 42)
+       
+
+# I'm confused about where in my code to add the grid search. Since I'm confused how it fits in alongside ovo & ova
        if kernel == 'linear':
-              svm = SVC(C=c, kernel = kernel, class_weight = 'balanced', gamma = gamma )
+              grid_search = GridSearchCV(
+              estimator=svm,
+              param_grid=param_grid,
+              cv=5,
+              scoring="accuracy",
+              verbose=1,
+              return_train_score=True
+              classes = np.unique(y_train)
+              ova_classifiers = []
+              for cls in classes:
+                     y_bin = (y_train == cls).astype(int)
+                     clf = SVC( kernel = kernel, class_weight = 'balanced', gamma = gamma )
+                     clf.fit(x_train, y_bin)
+                     ova_classifiers.append((cls, clf))
+
+              classes = np.unique(y_train)
+              ovo_classifiers = []
+              for cls1, cls2 in combinations(classes, 2):
+                     idx = np.where((y_train == cls1) | (y_train == cls2))[0]
+                     X_pair = x_train[idx]
+                     y_pair = y_train[idx]
+                     y_bin = (y_pair == cls1).astype(int)
+                     clf = SVC( kernel = kernel, class_weight = 'balanced', gamma = gamma)
+                     clf.fit(X_pair, y_bin)
+                     ovo_classifiers.append(((cls1, cls2), clf))
+
+
+
        elif kernel == 'polynomial':
-              svm = SVC(C=c, kernel = kernel, class_weight = 'balanced', gamma = gamma )
+              #these do all use ovo & ova in the same way, there are only differences in the arguments that are needed to be passed.
+              #could change ovo & ova into their own function like the example code
+              pass
        elif kernel == 'rbf':
               svm = SVC(C=c, kernel = kernel, class_weight = 'balanced', gamma = gamma )
        svm.fit(x_train,y_train)
@@ -1042,6 +1121,28 @@ def svmmodel(y,data,c,gamma,kernel,degree):
        y_pred = svm.predict(x_test)
        accuracy = accuracy_score(y_pred,y_test)
        return svm,accuracy
+def getinput(features, colls):
+       entryarr = []
+       x = 0
+       while x < len(features):
+              entry_dtype = colls[features[x]].dtype
+              try:
+                     if entry_dtype == 'float64':
+                            entryarr.append(float(input(print("enter the value for ", features[x], ":\n"))))
+                            
+                     elif entry_dtype == 'int64':
+                            entryarr.append(int(input(print("enter the value for ", features[x], ":\n"))))
+                     elif entry_dtype == 'str':
+                            entryarr.append(int(input(print("enter the value for ", features[x], ":\n"))))
+                     else:
+                            print("unknown data type = ", entry_dtype)
+              except:
+                     print("invalid datatype, please use ", entry_dtype)
+                     continue
+              
+              x +=1
+       return entryarr
+
 #ovo = one vs one
 #ova = one vs all
 #input:
@@ -1058,7 +1159,6 @@ def applymodel(inputtype,inputs,model):
 
        
               pass
-
 def menu(colls):
        choice = 1#int(input("enter the option you want:\n 1) create supervised model"))
        mincorr= 0.06
@@ -1072,8 +1172,8 @@ def menu(colls):
 
               #targetvar = input("Enter the name of the collumn you want to predict, options:\n" + str(colls.columns) + "\n")
               #choice = int(input("if you are trying to predict a class based on input data enter 1 for neighbors model or 2 for SVM, enter 3 for a regression model\n"))
-              targetvar = "collision_severity"
-              choice = 1
+              targetvar = "number_of_vehicles"
+              choice = 3
        #if the user wants to enter a string y point then use a correlation model
       
 
@@ -1137,28 +1237,25 @@ def menu(colls):
                      y,data,features,pca,scaler = preprocessing(colls,targetvar,mincorr)
                      kmodel,accuracy= knnmodel(y,data,k)
                      x = 0
-                     for col in colls.columns:
-                            print(colls[col])
-                            print(colls[col].dtype)
-                     entryarr = []
-                     while x < len(features):
-                            entry_dtype = colls[features[x]].dtype
-                            try:
-                                   if entry_dtype == 'float64':
-                                          entryarr.append(float(input(print("enter the value for ", features[x], ":\n"))))
-                                          
-                                   elif entry_dtype == 'int64':
-                                          entryarr.append(int(input(print("enter the value for ", features[x], ":\n"))))
-                                   elif entry_dtype == 'str':
-                                          entryarr.append(int(input(print("enter the value for ", features[x], ":\n"))))
-                                   else:
-                                          print("unknown data type = ", entry_dtype)
-                            except:
-                                   print("invalid datatype, please use ", entry_dtype)
-                                   continue
-                            
-                            x +=1
-
+                     #entryarr = []
+                     #while x < len(features):
+                     #       entry_dtype = colls[features[x]].dtype
+                     #       try:
+                     #              if entry_dtype == 'float64':
+                     #                     entryarr.append(float(input(print("enter the value for ", features[x], ":\n"))))
+                     #                     
+                     #              elif entry_dtype == 'int64':
+                     #                     entryarr.append(int(input(print("enter the value for ", features[x], ":\n"))))
+                     #              elif entry_dtype == 'str':
+                     #                     entryarr.append(int(input(print("enter the value for ", features[x], ":\n"))))
+                     #              else:
+                     #                     print("unknown data type = ", entry_dtype)
+                     #       except:
+                     #              print("invalid datatype, please use ", entry_dtype)
+                     #              continue
+                     #       
+                     #       x +=1
+                     entryarr = getinput(features,colls)
                      indf = pd.DataFrame([entryarr], columns = features)
                      resultarr = []
                      result = -1
@@ -1186,22 +1283,26 @@ def menu(colls):
                      print("your final result is:\n", result[0], "\nwith an accuracy of:\n", result[1])
                                    
 
-                     
+              elif choice == 2:
+                     y,data,features,pca,scaler  = preprocessing(colls,targetvar,mincorr)
+                     #get a small grid for values
+                     #search for mincorr alongside grid
 
-              
+
+
               elif choice == 3:
                      mincorrdict = {}
                      pointer = mincorr
                      for i in np.arange(0.00,0.1,0.01):
                             try:
-                                   y, data = preprocessing(colls, targetvar,mincorr+i)
+                                   y,data,features,pca,scaler = preprocessing(colls, targetvar,mincorr+i)
                             except ZeroDivisionError:
                                    print("this iteration has zero columns within the correlation range\n mincorr = ", mincorr+i)
                                    continue
                             regmodel,rmse = regression(y,data)
                             mincorrdict[mincorr+i] = 1-rmse #converting so this value is better the higher the number to prevent needing a separate for loop depending on the model type
                             try:
-                                   y, data = preprocessing(colls, targetvar,mincorr-i)
+                                   y,data,features,pca,scaler = preprocessing(colls, targetvar,mincorr-i)
                             except ZeroDivisionError:
                                    print("this iteration has zero columns within the correlation range\n mincorr = ", mincorr-i)
                                    continue
@@ -1217,7 +1318,24 @@ def menu(colls):
                      mincorr = max(mincorrdict, key=mincorrdict.get)
                      if mincorr == pointer:
                             break
+                     entryarr = getinput(features,colls)
+                     indf = pd.DataFrame([entryarr], columns = features)
+                     resultarr = []
+                     result = -1
                      
+
+                     # Scale the input using the scaler used during training
+                     indf = scaler.transform(indf)
+                     indf = pca.transform(indf)
+
+
+                     # Predict using best_model from GridSearchCV
+                     #prediction = best_model.predict(user_input_scaled)[0]
+                     #prediction_proba = best_model.predict_proba(user_input_scaled)[0]
+                     result = []
+                     result.append(regmodel.predict(indf))
+                     result.append(rmse)
+                     print("your final result is:\n", result[0], "\n +- :\n", result[1])
               elif choice == 4:
                      model,rmse, targetvar,degree,x_name = getbestdegree(colls,corr_matrix,mincorr,numcolls,targetvar,3,5,5,slow)
                      print("accuracy: " + str(rmse))
