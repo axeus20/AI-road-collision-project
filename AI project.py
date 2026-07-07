@@ -371,6 +371,8 @@ def preprocessing(colls, targetvar,mincorr, init = True, pcamin=1,minvar = 0.8):
               #  instead of based on an outlier % which I think could be more accurate although it would use the same method of accuracy testing to improve
               #so the next question is, would it be better to simply test standardscaler vs robust scaler for my model as well vs remove those wih too manystandard deviations from the mean? 
               # especially since this would double the time taken, although O notation would be the same
+
+              #change this to using IQR if possible
               removal_indexes = (np.abs(stats.zscore(dfcorrs)) > 4).all(axis=1) #creates an array where indexes 3 or more standard deviations from the mean are true and others are false
               #add some consideration for when outliers should be removed (when they are a reasonably insigificant portion of the dataset)
               #if they are too significant increase the boundary for outlier classification intil they are reasonably insignificant
@@ -961,7 +963,6 @@ def linregplots(y_test,predictions):
        plt.show()
 #takes colls,targetvar returns regressionmodel
 def regression(y,data):
-       mincorr = 0.05
        #for a regression model I need to know the number of datapoints I'm using (multiple vs linear)
        #then I need to know the target variable & the data in a separate structure & form them into a train/test split
        #then use linear regression of find the intercept & coefficient
@@ -988,18 +989,6 @@ def regression(y,data):
               print(reg.coef_)
               predictions = reg.predict(x_test)
               #np.argmax(model.predict(x_val), axis=-1)
-              valuedict = {}
-              value = 0
-              for col in list(data.columns.values):
-                     #value = float(input(print("current mean = ", data.mean(), "\nenter the value of ", col ," to be used for regression:\n")))
-                     valuedict[col] = [value]
-
-              in_df = pd.DataFrame(valuedict)
-              inpredict = reg.predict(in_df)
-              if y.dtype == "int64":
-                     print("inpredict = ", round(inpredict[0]))
-              else:
-                     print("inpredict = ", inpredict[0])
        #check to see if linear regression has a good enough result, if it does not then preform polynomial regression
        print(predictions)
        print(predictions.dtype)
@@ -1081,46 +1070,54 @@ def svmmodel(y,data,c,gamma,kernel,degree):
        
 
 # I'm confused about where in my code to add the grid search. Since I'm confused how it fits in alongside ovo & ova
-       if kernel == 'linear':
-              grid_search = GridSearchCV(
-              estimator=svm,
-              param_grid=param_grid,
-              cv=5,
-              scoring="accuracy",
-              verbose=1,
-              return_train_score=True
-              classes = np.unique(y_train)
-              ova_classifiers = []
-              for cls in classes:
-                     y_bin = (y_train == cls).astype(int)
-                     clf = SVC( kernel = kernel, class_weight = 'balanced', gamma = gamma )
-                     clf.fit(x_train, y_bin)
-                     ova_classifiers.append((cls, clf))
+       param_grid = {'c': [0.1,1,10,100],
+                     'gamma': [1,0.1,0.01,0.001],
+                     'kernel': ['linear','polynomial','rbf'],
+                     'degree': [2,3,4]}
+       svm = SVC( class_weight = 'balanced', probability= True )
+       grid_search = GridSearchCV(
+       estimator=svm,
+       param_grid=param_grid,
+       cv=5,
+       scoring="accuracy",
+       verbose=1,
+       return_train_score=True)
+       grid_search.fit(x_train, y_train)
+       best_model = grid_search.best_estimator_
+       best_params = grid_search.best_params_
+       best_kernel = best_params['kernel']
 
-              classes = np.unique(y_train)
-              ovo_classifiers = []
-              for cls1, cls2 in combinations(classes, 2):
-                     idx = np.where((y_train == cls1) | (y_train == cls2))[0]
-                     X_pair = x_train[idx]
-                     y_pair = y_train[idx]
-                     y_bin = (y_pair == cls1).astype(int)
-                     clf = SVC( kernel = kernel, class_weight = 'balanced', gamma = gamma)
-                     clf.fit(X_pair, y_bin)
-                     ovo_classifiers.append(((cls1, cls2), clf))
+       #if best_kernel == 'linear':
+              #classes = np.unique(y_train)
+              #ova_classifiers = []
+              #for cls in classes:
+              #       y_bin = (y_train == cls).astype(int)
+              #       clf = SVC( kernel = kernel, class_weight = 'balanced', gamma = gamma )
+              #       clf.fit(x_train, y_bin)
+              #       ova_classifiers.append((cls, clf))
+
+              #classes = np.unique(y_train)
+              #ovo_classifiers = []
+              #for cls1, cls2 in combinations(classes, 2):
+              #       idx = np.where((y_train == cls1) | (y_train == cls2))[0]
+              #       X_pair = x_train[idx]
+              #       y_pair = y_train[idx]
+              #       y_bin = (y_pair == cls1).astype(int)
+              #       clf = SVC( kernel = kernel, class_weight = 'balanced', gamma = gamma)
+              #       clf.fit(X_pair, y_bin)
+              #       ovo_classifiers.append(((cls1, cls2), clf))
 
 
-
-       elif kernel == 'polynomial':
+       #elif best_kernel == 'polynomial':
               #these do all use ovo & ova in the same way, there are only differences in the arguments that are needed to be passed.
               #could change ovo & ova into their own function like the example code
-              pass
-       elif kernel == 'rbf':
-              svm = SVC(C=c, kernel = kernel, class_weight = 'balanced', gamma = gamma )
-       svm.fit(x_train,y_train)
+       #elif best_kernel == 'rbf':
+              #svm = SVC(C=c, kernel = kernel, class_weight = 'balanced', gamma = gamma )
+       #svm.fit(x_train,y_train)
        
-       y_pred = svm.predict(x_test)
+       y_pred = best_model.predict(x_test)
        accuracy = accuracy_score(y_pred,y_test)
-       return svm,accuracy
+       return best_model,accuracy
 def getinput(features, colls):
        entryarr = []
        x = 0
@@ -1172,8 +1169,8 @@ def menu(colls):
 
               #targetvar = input("Enter the name of the collumn you want to predict, options:\n" + str(colls.columns) + "\n")
               #choice = int(input("if you are trying to predict a class based on input data enter 1 for neighbors model or 2 for SVM, enter 3 for a regression model\n"))
-              targetvar = "number_of_vehicles"
-              choice = 3
+              targetvar = "collision_severity"
+              choice = 1
        #if the user wants to enter a string y point then use a correlation model
       
 
@@ -1285,6 +1282,7 @@ def menu(colls):
 
               elif choice == 2:
                      y,data,features,pca,scaler  = preprocessing(colls,targetvar,mincorr)
+                     thismodel = svmmodel(y,data)
                      #get a small grid for values
                      #search for mincorr alongside grid
 
