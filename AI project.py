@@ -131,7 +131,7 @@ from sklearn.model_selection import GridSearchCV
 #for PCA use robust scaler to cut out outliers?
 
 ####################################
-colls = pd.read_csv("C:\\Users\\axeus\\Downloads\\Filtered_Sheffield_Traffic_Data.csv")
+colls = pd.read_csv("C:\\Users\\alex\\Downloads\\Filtered_Sheffield_Traffic_Data.csv")
 
 #EDAsample = colls.sample(frac=0.1, random_state=42)
 colls.isna().sum()
@@ -1064,15 +1064,18 @@ def polymodel(y,data,c,gamma,degree):
        pass
 def polymodel(y,data,c,gamma):
        pass
-def svmmodel(y,data,c,gamma,kernel,degree):
+def svmmodel(y,data):
+       print(y)
        #this is the binary svm model which classifies between two classes
+       print(y)
        x_test, x_train,y_test,y_train = train_test_split(y,data,test_size = 0.25, random_state = 42)
-       
+       x_train = pd.DataFrame(x_train)
+
 
 # I'm confused about where in my code to add the grid search. Since I'm confused how it fits in alongside ovo & ova
-       param_grid = {'c': [0.1,1,10,100],
+       param_grid = {'C': [0.1,1,10,100],
                      'gamma': [1,0.1,0.01,0.001],
-                     'kernel': ['linear','polynomial','rbf'],
+                     'kernel': ['linear','poly','rbf'],
                      'degree': [2,3,4]}
        svm = SVC( class_weight = 'balanced', probability= True )
        grid_search = GridSearchCV(
@@ -1086,8 +1089,11 @@ def svmmodel(y,data,c,gamma,kernel,degree):
        best_model = grid_search.best_estimator_
        best_params = grid_search.best_params_
        best_kernel = best_params['kernel']
+       best_C = best_params['C']
+       best_gam = best_params['gamma']
+       best_deg = best_params['degree']
 
-       #if best_kernel == 'linear':
+       if best_kernel == 'linear':
               #classes = np.unique(y_train)
               #ova_classifiers = []
               #for cls in classes:
@@ -1107,13 +1113,14 @@ def svmmodel(y,data,c,gamma,kernel,degree):
               #       clf.fit(X_pair, y_bin)
               #       ovo_classifiers.append(((cls1, cls2), clf))
 
-
-       #elif best_kernel == 'polynomial':
+              svm = SVC(C=best_C, kernel = best_kernel, class_weight = 'balanced', gamma = best_gam )
+       elif best_kernel == 'polynomial':
               #these do all use ovo & ova in the same way, there are only differences in the arguments that are needed to be passed.
               #could change ovo & ova into their own function like the example code
-       #elif best_kernel == 'rbf':
-              #svm = SVC(C=c, kernel = kernel, class_weight = 'balanced', gamma = gamma )
-       #svm.fit(x_train,y_train)
+              svm = SVC(C=best_C, kernel = best_kernel, class_weight = 'balanced', gamma = best_gam, degree = best_deg)
+       elif best_kernel == 'rbf':
+              svm = SVC(C=best_C, kernel = best_kernel, class_weight = 'balanced', gamma = best_gam )
+       svm.fit(x_train,y_train)
        
        y_pred = best_model.predict(x_test)
        accuracy = accuracy_score(y_pred,y_test)
@@ -1170,7 +1177,7 @@ def menu(colls):
               #targetvar = input("Enter the name of the collumn you want to predict, options:\n" + str(colls.columns) + "\n")
               #choice = int(input("if you are trying to predict a class based on input data enter 1 for neighbors model or 2 for SVM, enter 3 for a regression model\n"))
               targetvar = "collision_severity"
-              choice = 1
+              choice = 2
        #if the user wants to enter a string y point then use a correlation model
       
 
@@ -1282,7 +1289,12 @@ def menu(colls):
 
               elif choice == 2:
                      y,data,features,pca,scaler  = preprocessing(colls,targetvar,mincorr)
-                     thismodel = svmmodel(y,data)
+                     thismodel, accuracy = svmmodel(y,data)
+                     entryarr = getinput(features,colls)
+                     indf = pd.DataFrame([entryarr], columns = features)
+                     indf = pca.transform(indf)
+                     result = thismodel.predict(indf)
+                     print("your final result is:\n", result, "\nwith an accuracy of:\n", accuracy)
                      #get a small grid for values
                      #search for mincorr alongside grid
 
